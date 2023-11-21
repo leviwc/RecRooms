@@ -7,11 +7,16 @@ USER_IN_ROOMS = 'user_in_room_last_30_days_with_info.csv'
 USER_PROFILES_FILEPATH = 'user_profiles_based_on_last_30_days.csv'
 NORMALIZATION_PARAMETERS_FILEPATH = 'user_profiles_normalization_parameters.csv'
 ROOMS_WITH_INFO_FILEPATH = 'rooms_in_last_30_days_with_info.csv'
+SELECTED_ROOMS_WITH_INFO_FILEPATH = 'selected_rooms_with_info.csv'
 USER_ROOM_RECOMMENDATIONS_FILEPATH = 'user_room_recommendations.csv'
+USER_ROOM_RECOMMENDATIONS_SELECTED_FILEPATH = 'user_room_recommendations_selected.csv'
+SELECTED_USERS = 'selected_users.csv'
+
 users_rooms_with_info = pd.read_csv(USER_IN_ROOMS)
 user_id_with_room_ids = users_rooms_with_info[['user_id', 'room_id']]
 users_rooms_with_info.drop(columns=['room_id'])
-target_rooms_with_info = pd.read_csv(ROOMS_WITH_INFO_FILEPATH)
+target_rooms_with_info = pd.read_csv(SELECTED_ROOMS_WITH_INFO_FILEPATH)
+selected_users = pd.read_csv(SELECTED_USERS)
 
 def build_type_features(df):
     features_df = pd.DataFrame()
@@ -144,16 +149,17 @@ def get_recommended_rooms_for_users(active_room_features, user_profiles):
     # Convert DataFrames to numpy arrays for faster computation
     active_room_features = active_room_features.values
     user_profiles = user_profiles.values
-    cosine_similarity_matrix = pairwise_distances(user_profiles, active_room_features, metric='cosine')
-    jaccard_similarity_matrix = pairwise_distances(user_profiles, active_room_features, metric='jaccard')
-    pearson_similarity_matrix = pairwise_distances(user_profiles, active_room_features, metric='correlation')
+    cosine_distance_matrix = pairwise_distances(user_profiles, active_room_features, metric='cosine')
+    jaccard_distance_matrix = pairwise_distances(user_profiles, active_room_features, metric='jaccard')
+    pearson_distance_matrix = pairwise_distances(user_profiles, active_room_features, metric='correlation')
 
 
 
-    # Create a DataFrame from the similarity matrix
-    cosine_similarity_df = pd.DataFrame(cosine_similarity_matrix, index=user_ids, columns=active_room_ids)
-    jaccard_similarity_df = pd.DataFrame(jaccard_similarity_matrix, index=user_ids, columns=active_room_ids)
-    pearson_similarity_df = pd.DataFrame(pearson_similarity_matrix, index=user_ids, columns=active_room_ids)
+    # Create a DataFrame from the distance matrix
+    cosine_similarity_df = 1 - pd.DataFrame(cosine_distance_matrix, index=user_ids, columns=active_room_ids)
+    jaccard_similarity_df = 1 - pd.DataFrame(jaccard_distance_matrix, index=user_ids, columns=active_room_ids)
+    pearson_similarity_df = 1 - pd.DataFrame(pearson_distance_matrix, index=user_ids, columns=active_room_ids)
+
 
     # Create a DataFrame for recommended rooms
     recommended_rooms = []
@@ -163,6 +169,9 @@ def get_recommended_rooms_for_users(active_room_features, user_profiles):
         user_cosine_recommendations = cosine_similarity_df.loc[user_id].reset_index()
         user_cosine_recommendations.columns = ['room_id', 'cosine_similarity']
         user_cosine_recommendations['user_id'] = user_id
+
+        # Make user id to be the second column and cosine the third
+        user_cosine_recommendations = user_cosine_recommendations[['user_id', 'room_id', 'cosine_similarity']]
 
         # Get recommendations based on Jaccard similarity
         user_jaccard_recommendations = jaccard_similarity_df.loc[user_id].reset_index()
@@ -175,9 +184,11 @@ def get_recommended_rooms_for_users(active_room_features, user_profiles):
         # Merge the recommendations from all three similarity measures
         user_recommendations = pd.merge(user_cosine_recommendations, user_jaccard_recommendations, on='room_id')
         user_recommendations = pd.merge(user_recommendations, user_pearson_recommendations, on='room_id')
+        # sort by cosine_similarity
+        user_recommendations = user_recommendations.sort_values('cosine_similarity', ascending=False)
         recommended_rooms.append(user_recommendations)
 
-    print(recommended_rooms)
+
 
     recommended_rooms_df = pd.concat(recommended_rooms)
 
@@ -203,6 +214,7 @@ if __name__ == '__main__':
     user_profiles.to_csv(USER_PROFILES_FILEPATH)
     normalization_parameters.to_csv(NORMALIZATION_PARAMETERS_FILEPATH)
 
-    recommendations = build_room_recommendations(normalization_parameters, user_profiles, target_rooms_with_info)
-    # recommendations.to_csv(USER_ROOM_RECOMMENDATIONS_FILEPATH) # FILE IS 16GB
-    recommendations.head(100).to_csv('first_100_rows.csv', index=False)
+    selected_user_profiles = user_profiles[user_profiles['user_id'].isin(selected_users['user_id'])]
+    recommendations = build_room_recommendations(normalization_parameters, selected_user_profiles, target_rooms_with_info)
+    # recommendations.to_csv(USER_ROOM_RECOMMENDATIONS_FILEPATH)
+    recommendations.to_csv(USER_ROOM_RECOMMENDATIONS_SELECTED_FILEPATH)
