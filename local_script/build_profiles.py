@@ -1,5 +1,6 @@
 import pandas as pd
 from sklearn.metrics import pairwise_distances
+from scipy.spatial.distance import cdist
 import matplotlib.pyplot as plt
 
 
@@ -163,9 +164,9 @@ def get_recommended_rooms_for_users(active_room_features, user_profiles):
     # Convert DataFrames to numpy arrays for faster computation
     active_room_features = active_room_features.values
     user_profiles = user_profiles.values
-    cosine_distance_matrix = pairwise_distances(user_profiles, active_room_features, metric='cosine')
-    jaccard_distance_matrix = pairwise_distances(user_profiles, active_room_features, metric='jaccard')
-    pearson_distance_matrix = pairwise_distances(user_profiles, active_room_features, metric='correlation')
+    cosine_distance_matrix = cdist(user_profiles, active_room_features, metric='cosine')
+    jaccard_distance_matrix = cdist(user_profiles, active_room_features, metric='jaccard')
+    pearson_distance_matrix = cdist(user_profiles, active_room_features, metric='correlation')
 
 
 
@@ -276,8 +277,6 @@ def calculate_ap_for_recommendation(recommendation, relevant_rooms, rank):
     return ans_df
 
 def automatic_avaliation(user_rooms_with_info, relevant_sample_size, random_irrelevant_sample_size, minimum_entried_rooms_of_user, ranks):
-    relevant_sample_size = 5
-    random_irrelevant_sample_size = 20
     user_rooms_with_info_filtered = filter_users(user_rooms_with_info, minimum_entried_rooms_of_user)
     ranks = [3, 5, 10]
 
@@ -287,10 +286,7 @@ def automatic_avaliation(user_rooms_with_info, relevant_sample_size, random_irre
     all_rooms_with_info = user_rooms_with_info_filtered
     all_rooms_with_info = all_rooms_with_info.drop(columns=['user_id']).drop_duplicates()
     grouped_user_df = user_rooms_with_info_filtered.groupby('user_id')
-    #print amount of users
-    print(len(grouped_user_df))
-    # return early
-    return []
+
     ans_list = []
     for user_id, user_df in grouped_user_df:
         #get up to 5 random rooms from user df with different room ids, even tho user_df has duplicate room ids
@@ -338,14 +334,14 @@ if __name__ == '__main__':
     # mrr_df = calculate_mrr_with_relevancy_grade(recommendations, relevancy_grade_df)
     # mrr_df.to_csv(MRR_FILEPATH)
 
-    relevant_sample_size = 5
-    random_irrelevant_sample_size = 20
-    minimum_entried_rooms_of_user = 10
-    ranks = [3, 5, 10]
-    ans_df = automatic_avaliation(users_rooms_with_info, relevant_sample_size, random_irrelevant_sample_size, minimum_entried_rooms_of_user, ranks)
-    print(ans_df)
-    ans_df.to_csv('ans_5_relevant_20_irrelevant.csv')
-    ans_df = pd.read_csv('ans_5_relevant_20_irrelevant.csv')
+    # relevant_sample_size = 1
+    # random_irrelevant_sample_size = 24
+    # minimum_entried_rooms_of_user = 10
+    # ranks = [3, 5, 10]
+    # ans_df = automatic_avaliation(users_rooms_with_info, relevant_sample_size, random_irrelevant_sample_size, minimum_entried_rooms_of_user, ranks)
+    # print(ans_df)
+    # ans_df.to_csv('ans_1_relevant_24_irrelevant_2.csv')
+    ans_df = pd.read_csv('ans_1_relevant_24_irrelevant_2.csv')
 
     # make a bars graph with y axis as the average precision and x axis as the rank, and colored by the method and convert average precision to percentage, and show % in the graph y axis
     ans_df['average_precision'] = ans_df['average_precision'] * 100
@@ -353,13 +349,13 @@ if __name__ == '__main__':
     # make the graph but prettier
     plt.xlabel('Rank')
     plt.ylabel('Precision')
-    plt.title('Mean Average Precision for each rank')
+    plt.title('Mean Reciprocal Precision Rank (MRR)')
     # Fix the numbers rotation on the x axis
     plt.xticks(rotation=0)
     # Add the % in the y axis numbers
     plt.gca().yaxis.set_major_formatter('{:.0f}%'.format)
     #write the graph to  a file
-    plt.savefig('mean_average_precision_for_each_rank.png')
+    plt.savefig('mean_recriprocal_rank_for_each_rank_2.png')
     #render
     plt.show()
 
