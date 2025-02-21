@@ -143,9 +143,8 @@ def filter_users(df, amount_of_entries):
 
 def build_users_profiles(users_rooms_with_info):
     users_rooms_with_info = filter_users(users_rooms_with_info, 3)
+    
     user_in_room_with_features, normalization_parameters = build_features(users_rooms_with_info)
-
-    # Aggregate features by user
     user_profiles = user_in_room_with_features.groupby('user_id', as_index=False).mean()
 
     return user_profiles, normalization_parameters
@@ -165,8 +164,17 @@ def get_recommended_rooms_for_users(active_room_features, user_profiles):
     active_room_features = active_room_features.values
     user_profiles = user_profiles.values
     cosine_distance_matrix = cdist(user_profiles, active_room_features, metric='cosine')
-    jaccard_distance_matrix = cdist(user_profiles, active_room_features, metric='jaccard')
     pearson_distance_matrix = cdist(user_profiles, active_room_features, metric='correlation')
+
+    threshold = 0.5
+    
+# Binarize user profiles
+    user_profiles_binary = (user_profiles > threshold).astype(int)
+
+# Binarize active room features
+    active_room_features_binary = (active_room_features > threshold).astype(int)
+
+    jaccard_distance_matrix = cdist(user_profiles_binary, active_room_features_binary, metric='jaccard')
 
 
 
@@ -289,32 +297,32 @@ def automatic_avaliation(user_rooms_with_info, relevant_sample_size, random_irre
 
     ans_list = []
     for user_id, user_df in grouped_user_df:
-        #get up to 5 random rooms from user df with different room ids, even tho user_df has duplicate room ids
+        # get a number of random rooms the user has been in 
         separate_rooms_df = user_df.drop_duplicates(subset='room_id').sample(n=relevant_sample_size, random_state=42)
-
-        #print number of rows if number of rows is not 35
-        if len(separate_rooms_df) != relevant_sample_size:
-            separate_rooms_df.to_csv('this_is_weird_separated_rooms.csv')
         # drop the rows with room id in separate_rooms_df
         remainings_df = user_df.drop(user_df[user_df['room_id'].isin(separate_rooms_df['room_id'])].index)
-        # remainings_df = remainings_df.drop(columns=['room_id'])
+
+        # build user profile with the rooms the user has been in without the ones in separate_rooms_df
         user_profile, parameters = build_users_profiles(remainings_df)
+
+        # get random rooms that the user has not been in
         random_rooms = all_rooms_with_info[~all_rooms_with_info['room_id'].isin(user_df['room_id'])].sample(n=random_irrelevant_sample_size, random_state=42)
-        if len(random_rooms) != random_irrelevant_sample_size:
-            random_rooms.to_csv('this_is_weird_random_rooms.csv')
+
+        # merge the random rooms with the separate rooms
         random_rooms = pd.merge(random_rooms, separate_rooms_df, how='outer')
-        if len(random_rooms) != random_irrelevant_sample_size + relevant_sample_size:
-            random_rooms.to_csv('this_is_weird_merged_random_rooms.csv')
+        
+        # build item profile for rooms
         random_rooms_with_features, _parameters = build_features(random_rooms, parameters, False)
-        if len(random_rooms_with_features) != random_irrelevant_sample_size + relevant_sample_size:
-            random_rooms_with_features.to_csv('weird_weird_random_rooms_with_features.csv')
+
+        # get recommendations for the user
         recommendations_df = get_recommended_rooms_for_users(random_rooms_with_features, user_profile)
-        if len(recommendations_df) != random_irrelevant_sample_size + relevant_sample_size:
-            recommendations_df.to_csv('weird_weird_recommendations_df.csv')
+
         # calculate ap for each rank
         for rank in ranks:
             ap_calculation = calculate_ap_for_recommendation(recommendations_df, separate_rooms_df, rank)
             ans_list.append(ap_calculation)
+
+    # get the mean for all users for the results
     ans_df = pd.concat(ans_list).groupby(['method', 'rank']).mean()
     return ans_df
 
@@ -334,13 +342,13 @@ if __name__ == '__main__':
     # mrr_df = calculate_mrr_with_relevancy_grade(recommendations, relevancy_grade_df)
     # mrr_df.to_csv(MRR_FILEPATH)
 
-    # relevant_sample_size = 1
-    # random_irrelevant_sample_size = 24
-    # minimum_entried_rooms_of_user = 10
-    # ranks = [3, 5, 10]
-    # ans_df = automatic_avaliation(users_rooms_with_info, relevant_sample_size, random_irrelevant_sample_size, minimum_entried_rooms_of_user, ranks)
-    # print(ans_df)
-    # ans_df.to_csv('ans_1_relevant_24_irrelevant_2.csv')
+    relevant_sample_size = 5 
+    random_irrelevant_sample_size = 20
+    minimum_entried_rooms_of_user = 10
+    ranks = [3, 5, 10]
+    ans_df = automatic_avaliation(users_rooms_with_info, relevant_sample_size, random_irrelevant_sample_size, minimum_entried_rooms_of_user, ranks)
+    print(ans_df)
+    ans_df.to_csv('ans_1_relevant_24_irrelevant_2.csv')
     ans_df = pd.read_csv('ans_1_relevant_24_irrelevant_2.csv')
 
     # make a bars graph with y axis as the average precision and x axis as the rank, and colored by the method and convert average precision to percentage, and show % in the graph y axis
@@ -349,13 +357,13 @@ if __name__ == '__main__':
     # make the graph but prettier
     plt.xlabel('Rank')
     plt.ylabel('Precision')
-    plt.title('Mean Reciprocal Precision Rank (MRR)')
+    plt.title('Mean Average Precision Rank (MAP)')
     # Fix the numbers rotation on the x axis
     plt.xticks(rotation=0)
     # Add the % in the y axis numbers
     plt.gca().yaxis.set_major_formatter('{:.0f}%'.format)
     #write the graph to  a file
-    plt.savefig('mean_recriprocal_rank_for_each_rank_2.png')
+    plt.savefig('mean_average_precision_for_each_rank_2.png')
     #render
     plt.show()
 
